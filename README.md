@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Welcome to your Lovable project
 
 ## Project info
@@ -71,3 +72,10 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+=======
+# tradchatbot
+
+Building ai dreaven cursor for treadingview where user can automate indicator and trade. 
+
+An Ai deriven automate ur trade using various ai agents and indicater which help you gain maximum gain.. 
+>>>>>>> c798ffcd2a8f85a5307e84bf5ee696ba81486f37
