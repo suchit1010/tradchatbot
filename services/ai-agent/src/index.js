@@ -1,52 +1,54 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const OpenAI = require('openai');
-const winston = require('winston');
+// Import required dependencies
+require('dotenv').config(); // Load environment variables from .env file
+const express = require('express'); // Web framework for Node.js
+const cors = require('cors'); // Enable Cross-Origin Resource Sharing
+const helmet = require('helmet'); // Security middleware for Express
+const morgan = require('morgan'); // HTTP request logger
+const OpenAI = require('openai'); // OpenAI API client
+const winston = require('winston'); // Logging library
 
 // Initialize Express app
 const app = express();
 
-// Configure logger
+// Configure logger for application-wide logging
 const logger = winston.createLogger({
-  level: 'info',
+  level: 'info', // Log level threshold
   format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
+    winston.format.timestamp(), // Add timestamps to logs
+    winston.format.json() // Format logs as JSON
   ),
   transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
+    new winston.transports.Console(), // Output logs to console
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }), // Store error logs
+    new winston.transports.File({ filename: 'logs/combined.log' }) // Store all logs
   ]
 });
 
-// Initialize OpenAI client
+// Initialize OpenAI client with API key from environment variables
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Middleware
+// Apply middleware to Express application
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000', // Allow requests from frontend
+  credentials: true // Allow cookies to be sent with requests
 }));
-app.use(helmet());
-app.use(morgan('combined'));
-app.use(express.json());
+app.use(helmet()); // Add security headers
+app.use(morgan('combined')); // Log HTTP requests
+app.use(express.json()); // Parse JSON request bodies
 
-// Health check endpoint
+// Health check endpoint to verify service is running
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', service: 'ai-agent' });
 });
 
-// Chat endpoint
+// Chat endpoint - Process user messages and get AI responses
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, symbol } = req.body;
     
+    // Validate request format
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Invalid messages format' });
     }
@@ -58,6 +60,7 @@ app.post('/api/chat', async (req, res) => {
     }));
     
     // Add system message with context about the trading platform
+    // This sets the AI's role and gives it context about what it's supposed to do
     openaiMessages.unshift({
       role: 'system',
       content: `You are an AI trading assistant for TradBot, an advanced trading platform. 
@@ -67,20 +70,21 @@ app.post('/api/chat', async (req, res) => {
       You can provide code snippets for Pine Script trading strategies when asked.`
     });
 
-    // Call OpenAI API
+    // Call OpenAI API to generate chat completion
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4',
+      model: process.env.OPENAI_MODEL || 'gpt-4', // Use specified model or default to GPT-4
       messages: openaiMessages,
-      temperature: 0.7,
-      max_tokens: 1000,
+      temperature: 0.7, // Control randomness (higher = more creative)
+      max_tokens: 1000, // Limit response length
     });
 
-    // Get the AI response
+    // Extract AI response from completion
     const aiResponse = completion.choices[0].message;
     
-    // Log the interaction (not including full messages for privacy)
+    // Log the interaction without including full message content for privacy
     logger.info(`Chat request processed for symbol: ${symbol}, tokens: ${completion.usage.total_tokens}`);
     
+    // Return AI response to client
     return res.status(200).json({
       role: aiResponse.role,
       content: aiResponse.content,
@@ -88,21 +92,24 @@ app.post('/api/chat', async (req, res) => {
       usage: completion.usage,
     });
   } catch (error) {
+    // Log any errors that occur during processing
     logger.error('Error processing chat request', { error: error.message, stack: error.stack });
     return res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
 
-// Strategy generation endpoint
+// Strategy generation endpoint - Create Pine Script trading strategies
 app.post('/api/generate-strategy', async (req, res) => {
   try {
     const { symbol, timeframe, strategyType, parameters } = req.body;
     
+    // Validate required fields
     if (!symbol) {
       return res.status(400).json({ error: 'Symbol is required' });
     }
 
     // Create a detailed prompt for strategy generation
+    // This instructs the AI on what kind of Pine Script code to generate
     const prompt = `Generate a Pine Script trading strategy for ${symbol} on the ${timeframe || '1D'} timeframe.
     Strategy type: ${strategyType || 'trend following'}
     Additional parameters: ${JSON.stringify(parameters || {})}
@@ -110,7 +117,7 @@ app.post('/api/generate-strategy', async (req, res) => {
     The code should be properly formatted, commented, and follow Pine Script best practices.
     Include risk management and position sizing.`;
 
-    // Call OpenAI API
+    // Call OpenAI API to generate strategy code
     const completion = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL || 'gpt-4',
       messages: [
@@ -124,14 +131,16 @@ app.post('/api/generate-strategy', async (req, res) => {
         }
       ],
       temperature: 0.3, // Lower temperature for more deterministic code generation
-      max_tokens: 2000,
+      max_tokens: 2000, // Allow longer response for code generation
     });
 
     // Extract the code from the response
     const generatedCode = completion.choices[0].message.content;
     
+    // Log successful strategy generation
     logger.info(`Strategy generated for ${symbol}, type: ${strategyType}`);
     
+    // Return generated strategy code to client
     return res.status(200).json({
       code: generatedCode,
       symbol,
@@ -140,21 +149,24 @@ app.post('/api/generate-strategy', async (req, res) => {
       timestamp: new Date()
     });
   } catch (error) {
+    // Log any errors that occur during strategy generation
     logger.error('Error generating strategy', { error: error.message, stack: error.stack });
     return res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
 
-// Market analysis endpoint
+// Market analysis endpoint - Analyze current market conditions
 app.post('/api/analyze-market', async (req, res) => {
   try {
     const { symbol, marketData } = req.body;
     
+    // Validate required fields
     if (!symbol) {
       return res.status(400).json({ error: 'Symbol is required' });
     }
 
     // Create a prompt for market analysis
+    // This instructs the AI on what aspects of the market to analyze
     const prompt = `Analyze the current market conditions for ${symbol} based on the following data:
     ${JSON.stringify(marketData || {})}
     
@@ -167,7 +179,7 @@ app.post('/api/analyze-market', async (req, res) => {
     
     Format your response in a clear, structured manner.`;
 
-    // Call OpenAI API
+    // Call OpenAI API to generate market analysis
     const completion = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL || 'gpt-4',
       messages: [
@@ -180,32 +192,37 @@ app.post('/api/analyze-market', async (req, res) => {
           content: prompt
         }
       ],
-      temperature: 0.5,
-      max_tokens: 1000,
+      temperature: 0.5, // Balanced between creativity and consistency
+      max_tokens: 1000, // Limit response length
     });
 
+    // Extract the analysis from the response
     const analysis = completion.choices[0].message.content;
     
+    // Log successful market analysis
     logger.info(`Market analysis provided for ${symbol}`);
     
+    // Return analysis to client
     return res.status(200).json({
       analysis,
       symbol,
       timestamp: new Date()
     });
   } catch (error) {
+    // Log any errors that occur during market analysis
     logger.error('Error analyzing market', { error: error.message, stack: error.stack });
     return res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
 
-// Error handling middleware
+// Global error handling middleware
+// Catches any errors that weren't handled in specific routes
 app.use((err, req, res, next) => {
   logger.error('Unhandled error', { error: err.message, stack: err.stack });
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
-// Start the server
+// Start the server on the specified port
 const PORT = process.env.PORT || 8001;
 app.listen(PORT, () => {
   logger.info(`AI Agent service running on port ${PORT}`);
