@@ -14,7 +14,7 @@ RUN mkdir -p logs
 COPY . .
 
 # Expose port
-EXPOSE 8000
+EXPOSE 8004
 
 # Start the application
 CMD ["npm", "run", "dev"] 

@@ -1,27 +1,17 @@
-FROM node:18-alpine AS base
+FROM node:18-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Install dependencies
-COPY package.json package-lock.json* ./
-RUN npm ci
+# Copy package.json and install dependencies
+COPY package.json ./
+RUN npm install
 
-# Development stage
-FROM base AS development
-ENV NODE_ENV=development
+# Copy the rest of the application
 COPY . .
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-# Build stage
-FROM base AS build
-ENV NODE_ENV=production
-COPY . .
-RUN npm run build
+# Expose the port
+EXPOSE 3000
 
-# Production stage
-FROM nginx:alpine AS production
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"] 
+# Start the application in development mode
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"] 
